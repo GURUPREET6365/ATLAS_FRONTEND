@@ -212,6 +212,48 @@ function formatDate(value) {
     });
 }
 
+function pad(value) {
+    return String(value).padStart(2, "0");
+}
+
+function getTimezoneOffsetString() {
+    const offsetMinutes = -new Date().getTimezoneOffset();
+    const sign = offsetMinutes >= 0 ? "+" : "-";
+    const absoluteMinutes = Math.abs(offsetMinutes);
+    const hours = pad(Math.floor(absoluteMinutes / 60));
+    const minutes = pad(absoluteMinutes % 60);
+
+    return `${sign}${hours}:${minutes}`;
+}
+
+function formatDateTimeString(dateValue, timeText) {
+    return `${dateValue} ${timeText}.000000${getTimezoneOffsetString()}`;
+}
+
+function getMonthBoundaryDate(year, month, isEndDate = false) {
+    if (isEndDate) {
+        return new Date(year, month, 0);
+    }
+
+    return new Date(year, month - 1, 1);
+}
+
+function formatMonthBoundary(month, isEndDate = false) {
+    if (!Number.isInteger(month) || month < 1 || month > 12) {
+        throw new Error("Month must be between 1 and 12.");
+    }
+
+    const currentYear = new Date().getFullYear();
+    const boundaryDate = getMonthBoundaryDate(currentYear, month, isEndDate);
+    const dateText = [
+        boundaryDate.getFullYear(),
+        pad(boundaryDate.getMonth() + 1),
+        pad(boundaryDate.getDate())
+    ].join("-");
+
+    return formatDateTimeString(dateText, isEndDate ? "24:59:00" : "00:00:00");
+}
+
 function getExpensesFromResponse(response) {
     if (Array.isArray(response)) {
         return response;
@@ -302,19 +344,45 @@ function submitData() {
 
     const type = document.getElementById("filter_type").value;
 
-    if (type === "today") {
-        data.today = new Date().toISOString();
-    }
-    else if (type === "date_range") {
-        data.from_date = document.getElementById("from_date").value;
-        data.to_date = document.getElementById("to_date").value;
-    }
-    else if (type === "month") {
-        data.from_month = parseInt(document.getElementById("single_month").value);
-    }
-    else if (type === "month_range") {
-        data.from_month = parseInt(document.getElementById("from_month").value);
-        data.to_month = parseInt(document.getElementById("to_month").value);
+    try {
+        if (type === "today") {
+            data.today = "today";
+        }
+        else if (type === "date_range") {
+            const fromDate = document.getElementById("from_date").value;
+            const toDate = document.getElementById("to_date").value;
+
+            if (!fromDate || !toDate) {
+                throw new Error("Please select both from and to dates.");
+            }
+
+            data.from_date = formatDateTimeString(fromDate, "00:00:00");
+            data.to_date = formatDateTimeString(toDate, "24:59:00");
+        }
+        else if (type === "month") {
+            const selectedMonth = parseInt(document.getElementById("single_month").value, 10);
+
+            data.from_month = formatMonthBoundary(selectedMonth, false);
+            data.to_month = formatMonthBoundary(selectedMonth, true);
+        }
+        else if (type === "month_range") {
+            const fromMonth = parseInt(document.getElementById("from_month").value, 10);
+            const toMonth = parseInt(document.getElementById("to_month").value, 10);
+
+            if (!Number.isInteger(fromMonth) || !Number.isInteger(toMonth)) {
+                throw new Error("Please select both from and to months.");
+            }
+
+            if (fromMonth > toMonth) {
+                throw new Error("From month cannot be greater than to month.");
+            }
+
+            data.from_month = formatMonthBoundary(fromMonth, false);
+            data.to_month = formatMonthBoundary(toMonth, true);
+        }
+    } catch (error) {
+        setStatus(error.message, true);
+        return;
     }
 
     console.log("Sending:", data);
