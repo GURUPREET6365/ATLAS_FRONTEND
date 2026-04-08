@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Expense</title>
+
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            margin: 0;
+            background: #f4f6f8;
+            color: #1f2937;
+        }
+        .card {
+            background: #ffffff;
+            max-width: 640px;
+            margin: 0 auto 16px;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+        }
+        h2, h3 {
+            margin-top: 0;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            margin-top: 12px;
+        }
+        input, textarea, button {
+            width: 100%;
+            box-sizing: border-box;
+            margin-top: 8px;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            font: inherit;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 90px;
+        }
+        button {
+            background: #0088cc;
+            color: #ffffff;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        button:disabled {
+            opacity: 0.7;
+            cursor: wait;
+        }
+        .secondary-button {
+            background: #e5e7eb;
+            color: #1f2937;
+        }
+        .danger-button {
+            background: #ef4444;
+            color: #ffffff;
+        }
+        .row-card {
+            padding: 16px;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            background: #f8fafc;
+        }
+        .row-card + .row-card {
+            margin-top: 12px;
+        }
+        .row-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+        .row-header h3 {
+            margin: 0;
+            font-size: 18px;
+        }
+        .row-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        .row-actions button {
+            margin-top: 0;
+        }
+        .status {
+            margin-top: 14px;
+            padding: 12px;
+            border-radius: 8px;
+            background: #e0f2fe;
+            color: #075985;
+        }
+        .status.error {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+        .hidden {
+            display: none;
+        }
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 14px;
+            border-radius: 10px;
+            overflow-x: auto;
+        }
+        .hint {
+            margin: 8px 0 0;
+            color: #6b7280;
+            font-size: 14px;
+        }
+        @media (max-width: 640px) {
+            .row-header,
+            .row-actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>Add Expense</h2>
+    <p class="hint">This page sends a list of expenses to the backend. Telegram chat ID is added automatically.</p>
+
+    <input type="hidden" id="chat_id">
+
+    <label for="title">Title (optional)</label>
+    <input type="text" id="title" placeholder="Common title for all expense items">
+
+    <div id="expense_rows"></div>
+
+    <div class="row-actions">
+        <button type="button" id="add_row_button" class="secondary-button">Add Another Expense</button>
+        <button type="button" id="submit_button">Submit Expenses</button>
+    </div>
+
+    <p id="status_message" class="status hidden"></p>
+</div>
+
+<div id="response_card" class="card hidden">
+    <h3>Server Response</h3>
+    <pre id="response_output"></pre>
+</div>
+
+<script>
+const tg = window.Telegram.WebApp;
+const chatIdInput = document.getElementById("chat_id");
+const titleInput = document.getElementById("title");
+const expenseRows = document.getElementById("expense_rows");
+const addRowButton = document.getElementById("add_row_button");
+const submitButton = document.getElementById("submit_button");
+const statusMessage = document.getElementById("status_message");
+const responseCard = document.getElementById("response_card");
+const responseOutput = document.getElementById("response_output");
+
+tg.expand();
+
+const user = tg.initDataUnsafe?.user;
+
+if (user) {
+    chatIdInput.value = user.id;
+} else {
+    alert("Open this inside Telegram!");
+}
+
+function setStatus(message, isError = false) {
+    if (!message) {
+        statusMessage.textContent = "";
+        statusMessage.classList.add("hidden");
+        statusMessage.classList.remove("error");
+        return;
+    }
+
+    statusMessage.textContent = message;
+    statusMessage.classList.remove("hidden");
+    statusMessage.classList.toggle("error", isError);
+}
+
+function createExpenseRow() {
+    const row = document.createElement("div");
+    row.className = "row-card";
+
+    const rowNumber = expenseRows.children.length + 1;
+
+    row.innerHTML = `
+        <div class="row-header">
+            <h3>Expense ${rowNumber}</h3>
+            <button type="button" class="danger-button remove-row-button">Remove</button>
+        </div>
+        <label>Amount</label>
+        <input type="number" class="amount-input" min="1" step="1" placeholder="Enter amount">
+        <label>Reason</label>
+        <textarea class="reason-input" placeholder="Enter reason"></textarea>
+    `;
+
+    const removeButton = row.querySelector(".remove-row-button");
+    removeButton.addEventListener("click", () => {
+        row.remove();
+        updateRowNumbers();
+        ensureAtLeastOneRow();
+    });
+
+    return row;
+}
+
+function updateRowNumbers() {
+    Array.from(expenseRows.children).forEach((row, index) => {
+        const heading = row.querySelector("h3");
+        if (heading) {
+            heading.textContent = `Expense ${index + 1}`;
+        }
+    });
+}
+
+function ensureAtLeastOneRow() {
+    if (!expenseRows.children.length) {
+        expenseRows.appendChild(createExpenseRow());
+    }
+
+    const removeButtons = expenseRows.querySelectorAll(".remove-row-button");
+    removeButtons.forEach(button => {
+        button.disabled = expenseRows.children.length === 1;
+    });
+}
+
+function addExpenseRow() {
+    expenseRows.appendChild(createExpenseRow());
+    updateRowNumbers();
+    ensureAtLeastOneRow();
+}
+
+function buildPayload() {
+    const chatId = parseInt(chatIdInput.value, 10);
+    const title = titleInput.value.trim();
+    const rows = Array.from(expenseRows.children);
+
+    if (!Number.isInteger(chatId)) {
+        throw new Error("Telegram chat ID is missing.");
+    }
+
+    if (!rows.length) {
+        throw new Error("Add at least one expense.");
+    }
+
+    return rows.map((row, index) => {
+        const amountValue = row.querySelector(".amount-input").value.trim();
+        const reasonValue = row.querySelector(".reason-input").value.trim();
+        const amount = parseInt(amountValue, 10);
+
+        if (!amountValue || !Number.isInteger(amount)) {
+            throw new Error(`Expense ${index + 1}: amount must be a whole number.`);
+        }
+
+        if (!reasonValue) {
+            throw new Error(`Expense ${index + 1}: reason is required.`);
+        }
+
+        return {
+            chat_id: chatId,
+            title: title || null,
+            amount: amount,
+            reason: reasonValue
+        };
+    });
+}
+
+async function parseResponse(response) {
+    const contentType = response.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
+        return response.json();
+    }
+
+    return response.text();
+}
+
+async function submitExpenses() {
+    let payload;
+
+    try {
+        payload = buildPayload();
+    } catch (error) {
+        setStatus(error.message, true);
+        return;
+    }
+
+    setStatus("Submitting expenses...");
+    submitButton.disabled = true;
+    addRowButton.disabled = true;
+    responseCard.classList.add("hidden");
+
+    try {
+        const response = await fetch("https://unvigilantly-unvacillating-candance.ngrok-free.dev/telegram/web/add/expense", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const responseBody = await parseResponse(response);
+
+        if (!response.ok) {
+            const message = typeof responseBody === "string"
+                ? responseBody
+                : JSON.stringify(responseBody, null, 2);
+            throw new Error(message || `Request failed with status ${response.status}`);
+        }
+
+        responseOutput.textContent = typeof responseBody === "string"
+            ? responseBody
+            : JSON.stringify(responseBody, null, 2);
+        responseCard.classList.remove("hidden");
+        setStatus(`Submitted ${payload.length} expense item${payload.length === 1 ? "" : "s"} successfully.`);
+    } catch (error) {
+        console.error("Add expense failed:", error);
+        setStatus(`Error: ${error.message}`, true);
+    } finally {
+        submitButton.disabled = false;
+        addRowButton.disabled = false;
+    }
+}
+
+addRowButton.addEventListener("click", addExpenseRow);
+submitButton.addEventListener("click", submitExpenses);
+
+addExpenseRow();
+</script>
+
+</body>
+</html>
