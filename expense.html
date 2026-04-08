@@ -230,6 +230,25 @@ function formatDateTimeString(dateValue, timeText) {
     return `${dateValue} ${timeText}.000000${getTimezoneOffsetString()}`;
 }
 
+function formatLocalDate(date) {
+    return [
+        date.getFullYear(),
+        pad(date.getMonth() + 1),
+        pad(date.getDate())
+    ].join("-");
+}
+
+function formatCurrentDateTime(date) {
+    const microseconds = `${String(date.getMilliseconds()).padStart(3, "0")}000`;
+    const timeText = [
+        pad(date.getHours()),
+        pad(date.getMinutes()),
+        pad(date.getSeconds())
+    ].join(":");
+
+    return `${formatLocalDate(date)} ${timeText}.${microseconds}${getTimezoneOffsetString()}`;
+}
+
 function getMonthBoundaryDate(year, month, isEndDate = false) {
     if (isEndDate) {
         return new Date(year, month, 0);
@@ -336,7 +355,6 @@ function submitData() {
     const data = {
         chat_id: parseInt(document.getElementById("chat_id").value),
         type: null,
-        today: null,
         from_date: null,
         to_date: null,
         from_month: null,
@@ -359,7 +377,11 @@ function submitData() {
         }
 
         if (selectedFilterType === "today") {
-            data.today = "today";
+            const now = new Date();
+            const todayDate = formatLocalDate(now);
+
+            data.from_date = formatDateTimeString(todayDate, "00:00:00");
+            data.to_date = formatCurrentDateTime(now);
         }
         else if (selectedFilterType === "date_range") {
             const fromDate = document.getElementById("from_date").value;
