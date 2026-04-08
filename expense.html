@@ -360,7 +360,7 @@ function submitData() {
             }
 
             data.from_date = formatDateTimeString(fromDate, "00:00:00");
-            data.to_date = formatDateTimeString(toDate, "24:59:00");
+            data.to_date = formatDateTimeString(toDate, "23:59:00");
         }
         else if (type === "month") {
             data.type = "single_month";
