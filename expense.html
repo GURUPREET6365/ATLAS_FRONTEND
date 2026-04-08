@@ -335,6 +335,7 @@ function renderExpenses(expenses) {
 function submitData() {
     const data = {
         chat_id: parseInt(document.getElementById("chat_id").value),
+        type: null,
         today: null,
         from_date: null,
         to_date: null,
@@ -346,9 +347,11 @@ function submitData() {
 
     try {
         if (type === "today") {
+            data.type = "today";
             data.today = "today";
         }
         else if (type === "date_range") {
+            data.type = "date_range";
             const fromDate = document.getElementById("from_date").value;
             const toDate = document.getElementById("to_date").value;
 
@@ -360,12 +363,14 @@ function submitData() {
             data.to_date = formatDateTimeString(toDate, "24:59:00");
         }
         else if (type === "month") {
+            data.type = "single_month";
             const selectedMonth = parseInt(document.getElementById("single_month").value, 10);
 
             data.from_month = formatMonthBoundary(selectedMonth, false);
             data.to_month = formatMonthBoundary(selectedMonth, true);
         }
         else if (type === "month_range") {
+            data.type = "month_range";
             const fromMonth = parseInt(document.getElementById("from_month").value, 10);
             const toMonth = parseInt(document.getElementById("to_month").value, 10);
 
