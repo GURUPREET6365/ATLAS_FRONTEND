@@ -71,6 +71,15 @@
             color: #6b7280;
             font-size: 14px;
         }
+        .results-summary {
+            margin: 0 0 14px;
+            padding: 12px 14px;
+            border-radius: 10px;
+            background: #ecfeff;
+            border: 1px solid #bae6fd;
+            font-weight: 600;
+            color: #0f172a;
+        }
         .expense-item {
             border: 1px solid #e5e7eb;
             border-radius: 10px;
@@ -140,6 +149,7 @@
         <h3>Expense Results</h3>
         <p id="results_count" class="results-count"></p>
     </div>
+    <p id="results_total" class="results-summary hidden"></p>
     <div id="results_list"></div>
 </div>
 
@@ -148,6 +158,7 @@ const tg = window.Telegram.WebApp;
 const resultsCard = document.getElementById("results_card");
 const resultsList = document.getElementById("results_list");
 const resultsCount = document.getElementById("results_count");
+const resultsTotal = document.getElementById("results_total");
 const statusMessage = document.getElementById("status_message");
 const submitButton = document.getElementById("submit_button");
 
@@ -318,6 +329,10 @@ function createExpenseItem(expense) {
     const item = document.createElement("div");
     item.className = "expense-item";
 
+    if (expense.title) {
+        item.appendChild(createExpenseField("Title", expense.title));
+    }
+
     const amount = createExpenseField("Amount", expense.amount);
     const reason = createExpenseField("Reason", expense.reason);
     const expenseDate = createExpenseField(
@@ -332,18 +347,30 @@ function createExpenseItem(expense) {
     return item;
 }
 
+function calculateTotalExpense(expenses) {
+    return expenses.reduce((total, expense) => {
+        const amount = Number(expense.amount);
+        return Number.isFinite(amount) ? total + amount : total;
+    }, 0);
+}
+
 function renderExpenses(expenses) {
     resultsList.innerHTML = "";
     resultsCard.classList.remove("hidden");
     resultsCount.textContent = `${expenses.length} item${expenses.length === 1 ? "" : "s"}`;
 
     if (!expenses.length) {
+        resultsTotal.textContent = "";
+        resultsTotal.classList.add("hidden");
         const emptyState = document.createElement("p");
         emptyState.className = "empty-state";
         emptyState.textContent = "No expenses found for this filter.";
         resultsList.appendChild(emptyState);
         return;
     }
+
+    resultsTotal.textContent = `Total Expense: ${calculateTotalExpense(expenses)}`;
+    resultsTotal.classList.remove("hidden");
 
     expenses.forEach(expense => {
         resultsList.appendChild(createExpenseItem(expense));
