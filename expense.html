@@ -251,7 +251,7 @@ function formatMonthBoundary(month, isEndDate = false) {
         pad(boundaryDate.getDate())
     ].join("-");
 
-    return formatDateTimeString(dateText, isEndDate ? "24:59:00" : "00:00:00");
+    return formatDateTimeString(dateText, isEndDate ? "23:59:00" : "00:00:00");
 }
 
 function getExpensesFromResponse(response) {
