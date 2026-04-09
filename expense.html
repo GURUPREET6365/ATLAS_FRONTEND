@@ -87,6 +87,18 @@
         .results-actions {
             margin-bottom: 14px;
         }
+        .search-controls {
+            display: grid;
+            grid-template-columns: 1fr 180px;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .search-input {
+            margin: 0;
+        }
+        .search-mode {
+            margin: 0;
+        }
         .expense-item {
             border: 1px solid #e5e7eb;
             border-radius: 10px;
@@ -110,6 +122,11 @@
             border-radius: 10px;
             background: #f8fafc;
             color: #6b7280;
+        }
+        @media (max-width: 640px) {
+            .search-controls {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -160,6 +177,13 @@
     <div class="results-actions">
         <button id="download_report_button" class="secondary-button hidden" type="button">Generate PDF Report</button>
     </div>
+    <div id="search_controls" class="search-controls hidden">
+        <input id="results_search" class="search-input" type="text" placeholder="Search returned expenses">
+        <select id="search_mode" class="search-mode">
+            <option value="all">All Fields</option>
+            <option value="title">Title Only</option>
+        </select>
+    </div>
     <div id="results_list"></div>
 </div>
 
@@ -170,9 +194,16 @@ const resultsList = document.getElementById("results_list");
 const resultsCount = document.getElementById("results_count");
 const resultsTotal = document.getElementById("results_total");
 const downloadReportButton = document.getElementById("download_report_button");
+const searchControls = document.getElementById("search_controls");
+const resultsSearch = document.getElementById("results_search");
+const searchMode = document.getElementById("search_mode");
 const statusMessage = document.getElementById("status_message");
 const submitButton = document.getElementById("submit_button");
 let latestExpenses = [];
+let latestExpenseIndex = [];
+let latestTitleIndex = [];
+let visibleExpenses = [];
+let searchDebounceTimer = null;
 
 // Expand to full screen
 tg.expand();
@@ -375,6 +406,31 @@ function calculateTotalExpense(expenses) {
     }, 0);
 }
 
+function normalizeSearchText(value) {
+    return String(value ?? "")
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function buildExpenseSearchIndex(expenses) {
+    return expenses.map(expense => {
+        const expenseDateValue = expense.expense_date ?? expense.expenseDate ?? expense.date;
+
+        return normalizeSearchText([
+            expense.title,
+            expense.amount,
+            expense.reason,
+            expenseDateValue,
+            formatDate(expenseDateValue)
+        ].join(" "));
+    });
+}
+
+function buildTitleSearchIndex(expenses) {
+    return expenses.map(expense => normalizeSearchText(expense.title));
+}
+
 function ensurePdfSpace(doc, currentY, requiredHeight, margin) {
     const pageHeight = doc.internal.pageSize.getHeight();
 
@@ -403,7 +459,7 @@ function writePdfText(doc, text, x, y, maxWidth, options = {}) {
 }
 
 function generatePdfReport() {
-    if (!latestExpenses.length) {
+    if (!visibleExpenses.length) {
         setStatus("No expenses available to generate a report.", true);
         return;
     }
@@ -425,7 +481,7 @@ function generatePdfReport() {
         });
         const margin = 40;
         const contentWidth = doc.internal.pageSize.getWidth() - (margin * 2);
-        const totalExpense = calculateTotalExpense(latestExpenses);
+        const totalExpense = calculateTotalExpense(visibleExpenses);
         const generatedAt = formatCurrentDateTime(new Date());
         let y = margin;
 
@@ -445,14 +501,14 @@ function generatePdfReport() {
             fontSize: 12,
             lineHeight: 18
         });
-        y = writePdfText(doc, `Total Items: ${latestExpenses.length}`, margin, y, contentWidth, {
+        y = writePdfText(doc, `Total Items: ${visibleExpenses.length}`, margin, y, contentWidth, {
             fontStyle: "bold",
             fontSize: 12,
             lineHeight: 18
         });
         y += 10;
 
-        latestExpenses.forEach((expense, index) => {
+        visibleExpenses.forEach((expense, index) => {
             const fields = [];
 
             if (expense.title) {
@@ -495,11 +551,13 @@ function generatePdfReport() {
     }
 }
 
-function renderExpenses(expenses) {
-    latestExpenses = expenses;
+function renderExpenseList(expenses, searchQuery = "") {
+    visibleExpenses = expenses;
     resultsList.innerHTML = "";
     resultsCard.classList.remove("hidden");
-    resultsCount.textContent = `${expenses.length} item${expenses.length === 1 ? "" : "s"}`;
+    resultsCount.textContent = searchQuery
+        ? `${expenses.length} of ${latestExpenses.length} item${latestExpenses.length === 1 ? "" : "s"}`
+        : `${expenses.length} item${expenses.length === 1 ? "" : "s"}`;
 
     if (!expenses.length) {
         downloadReportButton.classList.add("hidden");
@@ -519,6 +577,43 @@ function renderExpenses(expenses) {
     expenses.forEach(expense => {
         resultsList.appendChild(createExpenseItem(expense));
     });
+}
+
+function applyExpenseSearch() {
+    const query = normalizeSearchText(resultsSearch.value);
+    const selectedSearchMode = searchMode.value;
+
+    if (!query) {
+        renderExpenseList(latestExpenses);
+        return;
+    }
+
+    const filteredExpenses = latestExpenses.filter((expense, index) => {
+        const searchIndex = selectedSearchMode === "title"
+            ? latestTitleIndex[index]
+            : latestExpenseIndex[index];
+
+        return searchIndex.includes(query);
+    });
+
+    renderExpenseList(filteredExpenses, query);
+}
+
+function renderExpenses(expenses) {
+    latestExpenses = expenses;
+    latestExpenseIndex = buildExpenseSearchIndex(expenses);
+    latestTitleIndex = buildTitleSearchIndex(expenses);
+    resultsSearch.value = "";
+    searchMode.value = "all";
+
+    if (!expenses.length) {
+        searchControls.classList.add("hidden");
+        renderExpenseList(expenses);
+        return;
+    }
+
+    searchControls.classList.remove("hidden");
+    renderExpenseList(expenses);
 }
 
 // Submit data
@@ -625,6 +720,11 @@ function submitData() {
 }
 
 downloadReportButton.addEventListener("click", generatePdfReport);
+resultsSearch.addEventListener("input", () => {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(applyExpenseSearch, 120);
+});
+searchMode.addEventListener("change", applyExpenseSearch);
 </script>
 
 </body>
