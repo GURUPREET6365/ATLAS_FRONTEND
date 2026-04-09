@@ -137,9 +137,6 @@
 
     <input type="hidden" id="chat_id">
 
-    <label for="title">Title (optional)</label>
-    <input type="text" id="title" placeholder="Common title for all expense items">
-
     <div id="expense_rows"></div>
 
     <div class="row-actions">
@@ -158,7 +155,6 @@
 <script>
 const tg = window.Telegram.WebApp;
 const chatIdInput = document.getElementById("chat_id");
-const titleInput = document.getElementById("title");
 const expenseRows = document.getElementById("expense_rows");
 const addRowButton = document.getElementById("add_row_button");
 const submitButton = document.getElementById("submit_button");
@@ -200,6 +196,8 @@ function createExpenseRow() {
             <h3>Expense ${rowNumber}</h3>
             <button type="button" class="danger-button remove-row-button">Remove</button>
         </div>
+        <label>Title (optional)</label>
+        <input type="text" class="title-input" placeholder="Enter title">
         <label>Amount</label>
         <input type="number" class="amount-input" min="1" step="1" placeholder="Enter amount">
         <label>Reason</label>
@@ -244,7 +242,6 @@ function addExpenseRow() {
 
 function buildPayload() {
     const chatId = parseInt(chatIdInput.value, 10);
-    const title = titleInput.value.trim();
     const rows = Array.from(expenseRows.children);
 
     if (!Number.isInteger(chatId)) {
@@ -256,6 +253,7 @@ function buildPayload() {
     }
 
     return rows.map((row, index) => {
+        const titleValue = row.querySelector(".title-input").value.trim();
         const amountValue = row.querySelector(".amount-input").value.trim();
         const reasonValue = row.querySelector(".reason-input").value.trim();
         const amount = parseInt(amountValue, 10);
@@ -270,7 +268,7 @@ function buildPayload() {
 
         return {
             chat_id: chatId,
-            title: title || null,
+            title: titleValue || null,
             amount: amount,
             reason: reasonValue
         };
