@@ -506,7 +506,7 @@ async function deleteExpense(expense, deleteButton) {
 
     try {
         const response = await fetch("https://unvigilantly-unvacillating-candance.ngrok-free.dev/telegram/web/expense/delete", {
-            method: "POST",
+            method: "DELETE",
             headers: {
                 "Content-Type": "application/json"
             },
